@@ -10,3 +10,14 @@ export function requireLawGoKrOc(): string {
   }
   return oc;
 }
+
+export function requireRebApiKey(): string {
+  const key = process.env.REB_API_KEY;
+  if (!key) {
+    throw new Error(
+      "REB_API_KEY 환경변수가 설정되어 있지 않습니다. " +
+        ".env 파일을 만들고 REB_API_KEY=<발급받은 R-ONE 인증키>를 추가하세요 (.env.example 참고)."
+    );
+  }
+  return key;
+}
