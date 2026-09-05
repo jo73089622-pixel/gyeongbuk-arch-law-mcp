@@ -1,4 +1,4 @@
 node_modules/
 dist/
-data/*.json
-data/*.csv
+data/**
+!data/.gitkeep

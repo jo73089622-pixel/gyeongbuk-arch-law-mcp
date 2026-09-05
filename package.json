@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "parse:law": "node dist/scripts/parseLawFile.js"
   },
   "devDependencies": {
     "typescript": "^5.5.4",
