@@ -6,7 +6,11 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "parse:law": "node dist/scripts/parseLawFile.js"
+    "parse:law": "node dist/scripts/parseLawFile.js",
+    "fetch:law": "node dist/scripts/fetchLaw.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
   },
   "devDependencies": {
     "typescript": "^5.5.4",
