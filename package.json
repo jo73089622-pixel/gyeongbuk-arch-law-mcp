@@ -10,7 +10,9 @@
     "fetch:law": "node dist/scripts/fetchLaw.js"
   },
   "dependencies": {
-    "dotenv": "^16.4.5"
+    "@modelcontextprotocol/sdk": "^1.6.1",
+    "dotenv": "^16.4.5",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "typescript": "^5.5.4",
