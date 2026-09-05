@@ -2,4 +2,8 @@ node_modules/
 dist/
 data/**
 !data/.gitkeep
+!data/laws/
+!data/laws/.gitkeep
+!data/raw/
+!data/raw/.gitkeep
 .env

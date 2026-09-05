@@ -14,6 +14,7 @@
 import { fetchLawText } from "../lawApiClient.js";
 import { parseLawApiResponse } from "../parseLawApi.js";
 import { writeJSON } from "../storage.js";
+import { PARSED_LAW_SUBDIR, RAW_LAW_SUBDIR } from "../config.js";
 
 interface Args {
   mst?: string;
@@ -41,7 +42,7 @@ async function main(): Promise<void> {
 
   const raw = await fetchLawText({ mst, id, jo });
 
-  const rawFileName = `raw/${mst ?? id}.json`;
+  const rawFileName = `${RAW_LAW_SUBDIR}/${mst ?? id}.json`;
   await writeJSON(rawFileName, raw);
   console.log(`원본 응답 저장: data/${rawFileName}`);
   console.log("이 파일을 열어 실제 키 구조가 src/lawApiTypes.ts 가정과 맞는지 꼭 확인하세요.");
@@ -55,7 +56,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const parsedFileName = `laws/${parsed.lawId}.json`;
+  const parsedFileName = `${PARSED_LAW_SUBDIR}/${parsed.lawId}.json`;
   await writeJSON(parsedFileName, parsed);
   console.log(`파싱 결과 저장: data/${parsedFileName} (조문 ${parsed.articles.length}개)`);
 }

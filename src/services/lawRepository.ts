@@ -1,13 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { DATA_DIR } from "../config.js";
+import { DATA_DIR, PARSED_LAW_SUBDIR } from "../config.js";
 import { readJSON } from "../storage.js";
 import type { LawArticle, ParsedLaw } from "../parseLawApi.js";
 
-const LAWS_SUBDIR = "laws";
-
 async function listLawFiles(): Promise<string[]> {
-  const dir = path.join(DATA_DIR, LAWS_SUBDIR);
+  const dir = path.join(DATA_DIR, PARSED_LAW_SUBDIR);
   try {
     const entries = await fs.readdir(dir);
     return entries.filter((f) => f.endsWith(".json"));
@@ -31,7 +29,7 @@ export async function listLaws(): Promise<LawSummary[]> {
   return Promise.all(
     files.map(async (file) => {
       const fallbackId = path.basename(file, ".json");
-      const law = await readJSON<ParsedLaw>(`${LAWS_SUBDIR}/${file}`, { articles: [] });
+      const law = await readJSON<ParsedLaw>(`${PARSED_LAW_SUBDIR}/${file}`, { articles: [] });
       return {
         lawId: law.lawId ?? fallbackId,
         lawName: law.lawName,
@@ -45,7 +43,7 @@ export async function listLaws(): Promise<LawSummary[]> {
 }
 
 export async function getLaw(lawId: string): Promise<ParsedLaw | null> {
-  return readJSON<ParsedLaw | null>(`${LAWS_SUBDIR}/${lawId}.json`, null);
+  return readJSON<ParsedLaw | null>(`${PARSED_LAW_SUBDIR}/${lawId}.json`, null);
 }
 
 export async function getArticle(lawId: string, articleNumber: string): Promise<LawArticle | undefined> {
@@ -74,7 +72,7 @@ export async function searchArticles(query: string, lawId?: string): Promise<Art
 
   for (const file of files) {
     const fallbackId = path.basename(file, ".json");
-    const law = await readJSON<ParsedLaw>(`${LAWS_SUBDIR}/${file}`, { articles: [] });
+    const law = await readJSON<ParsedLaw>(`${PARSED_LAW_SUBDIR}/${file}`, { articles: [] });
     for (const article of law.articles) {
       if (articleText(article).toLowerCase().includes(needle)) {
         hits.push({ lawId: law.lawId ?? fallbackId, lawName: law.lawName, article });

@@ -13,6 +13,7 @@ import fs from "node:fs/promises";
 import { parseLawApiResponse } from "../parseLawApi.js";
 import type { RawLawResponse } from "../lawApiTypes.js";
 import { writeJSON } from "../storage.js";
+import { PARSED_LAW_SUBDIR } from "../config.js";
 
 async function main(): Promise<void> {
   const inputPath = process.argv[2];
@@ -33,7 +34,7 @@ async function main(): Promise<void> {
     );
   }
 
-  const fileName = `laws/${parsed.lawId ?? "unknown"}.json`;
+  const fileName = `${PARSED_LAW_SUBDIR}/${parsed.lawId ?? "unknown"}.json`;
   await writeJSON(fileName, parsed);
   console.log(`저장 완료: data/${fileName} (조문 ${parsed.articles.length}개)`);
 }
