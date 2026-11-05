@@ -1,4 +1,10 @@
-import "dotenv/config";
+import path from "node:path";
+import dotenv from "dotenv";
+import { PROJECT_ROOT } from "./config.js";
+
+// 실행 위치(cwd)와 관계없이 저장소 최상위의 .env 를 읽는다.
+// 이미 설정된 환경변수(예: Claude Desktop 설정의 env)는 덮어쓰지 않는다.
+dotenv.config({ path: path.join(PROJECT_ROOT, ".env"), quiet: true });
 
 export function requireLawGoKrOc(): string {
   const oc = process.env.LAW_GO_KR_OC;
@@ -20,4 +26,13 @@ export function requireRebApiKey(): string {
     );
   }
   return key;
+}
+
+/** 값 자체는 내보내지 않고 설정 여부만 알려 준다. */
+export function hasKescoApiKey(): boolean {
+  return Boolean(process.env.KESCO_API_KEY?.trim());
+}
+
+export function hasAnthropicApiKey(): boolean {
+  return Boolean(process.env.ANTHROPIC_API_KEY?.trim());
 }
