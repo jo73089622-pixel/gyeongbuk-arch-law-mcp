@@ -9,6 +9,8 @@
     "web": "node dist/web/server.js",
     "web:proxy": "node --use-env-proxy dist/web/server.js",
     "kesco:prefetch": "node dist/scripts/kescoPrefetch.js",
+    "kesco:verify": "node dist/scripts/kescoVerify.js",
+    "kesco:verify:proxy": "node --use-env-proxy dist/scripts/kescoVerify.js",
     "parse:law": "node dist/scripts/parseLawFile.js",
     "fetch:law": "node dist/scripts/fetchLaw.js",
     "test": "tsc && node --test \"dist/**/*.test.js\""
