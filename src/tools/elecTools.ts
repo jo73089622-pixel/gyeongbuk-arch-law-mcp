@@ -3,7 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CHARACTER_LIMIT } from "../constants.js";
 import { formatSearchMarkdown } from "../elec/format.js";
 import { KesApiError } from "../elec/kescoClient.js";
-import { GYEONGBUK_SIGUNGU } from "../elec/regions.js";
+import { listSigungu, REGION_SOURCE, resolveSido, SIDO_LIST } from "../elec/regions.js";
 import {
   CATEGORY_OPTIONS,
   defaultMonths,
@@ -39,25 +39,34 @@ export function registerElecTools(server: McpServer): void {
   server.registerTool(
     "elec_list_regions",
     {
-      title: "수전설비 조회 가능 지역(경상북도 시군) 목록",
-      description: `elec_search_capacity에 넣을 수 있는 경상북도 22개 시군 이름과 5자리 시군구코드를 보여준다.
+      title: "수전설비 조회 가능 지역(전국 시도·시군구) 목록",
+      description: `elec_search_capacity에 넣을 수 있는 지역을 보여준다.
 
-경상북도 밖의 지역은 5자리 법정동 시군구코드를 직접 넣으면 조회할 수 있다(시험되지 않은 지역).
+Args:
+  - sido (string, 선택): 시도 이름(예: 경기, 경상북도) 또는 2자리 코드. 없으면 시도 목록을, 있으면 그 시도의 시군구와 5자리 코드를 보여준다.
 
-Returns:
-  각 시군의 code(5자리), name, note(조회 유의사항)`,
-      inputSchema: z.object({}).strict(),
+출처: 국토교통부 법정동코드('존재' 코드). 시 아래 구(예: 수원시 장안구)는 시 전체를 조회한 뒤 주소로 거른다.`,
+      inputSchema: z.object({ sido: z.string().max(20).optional().describe("시도 이름 또는 2자리 코드") }).strict(),
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async () => {
+    async ({ sido }) => {
+      if (!sido) {
+        const text = ["# 시도 목록", "", ...SIDO_LIST.map((s) => `- ${s.name} (${s.code})`), "", `출처: ${REGION_SOURCE}`].join("\n");
+        return { content: [{ type: "text", text }], structuredContent: { sidoList: [...SIDO_LIST] } };
+      }
+      const code = resolveSido(sido);
+      if (!code) {
+        return { isError: true, content: [{ type: "text", text: `시도를 찾지 못했습니다: '${sido}'. 시도 목록은 sido 없이 호출해 확인하십시오.` }] };
+      }
+      const rows = listSigungu(code);
       const text = [
-        "# 경상북도 시군 (시군구코드)",
+        `# ${SIDO_LIST.find((s) => s.code === code)?.name} 시군구 (시군구코드)`,
         "",
-        ...GYEONGBUK_SIGUNGU.map((s) => `- ${s.name}: ${s.code}${s.note ? ` — ${s.note}` : ""}`),
+        ...rows.map((s) => `- ${s.name}: ${s.code}${s.note ? ` — ${s.note}` : ""}`),
         "",
-        "※ 군위군은 2023. 7. 1. 대구광역시로 편입되어(시군구코드 27720) 이 목록에 없습니다.",
+        `출처: ${REGION_SOURCE}`,
       ].join("\n");
-      return { content: [{ type: "text", text }], structuredContent: { regions: [...GYEONGBUK_SIGUNGU] } };
+      return { content: [{ type: "text", text }], structuredContent: { regions: rows } };
     }
   );
 
@@ -71,7 +80,7 @@ Returns:
 처음 조회하는 지역·기간은 한 달에 1회씩 API를 호출해 시간이 걸린다(기본 ${defaultMonths()}개월). 한 번 받은 달은 저장해 두고 다시 쓴다.
 
 Args:
-  - sigungu (string): 경상북도 시군 이름(예: "구미시") 또는 5자리 시군구코드(예: "47190"). 필수.
+  - sigungu (string): 시도+시군구 이름(예: "경북 구미시", "경기 수원시 장안구") 또는 5자리 시군구코드(예: "47190"). 필수. "중구"처럼 여러 시도에 있는 이름은 시도를 붙인다.
   - keyword (string, 선택): 상호·주소 검색어. 공백으로 나눈 낱말을 모두 포함하는 기록만 찾는다. 번지가 응답에 없을 수 있으므로 상호명이나 동·도로명으로 찾는 것이 좋다.
   - months (number): 최근 몇 개월을 조회할지 (이번 달 포함, 1~${MAX_MONTHS}, 기본 ${defaultMonths()}). 정기검사는 대부분 2년 또는 3년마다(전후 2개월) 받는다(「전기안전관리법 시행규칙」 별표 4 제2호 나목).
   - category ('자가용'|'사업용'|'일반용'|'전체'): 검사점검설비용도구분 (기본 '자가용' — 수전설비 사용전검사·정기검사 대상).
@@ -88,7 +97,7 @@ Error Handling:
   인증키 미설정·오류, 지역 인식 실패, 응답 형식 이상은 isError=true와 안내 문구로 돌려준다.`,
       inputSchema: z
         .object({
-          sigungu: z.string().min(1).describe("경상북도 시군 이름(예: 구미시) 또는 5자리 시군구코드(예: 47190)"),
+          sigungu: z.string().min(1).describe("시도+시군구 이름(예: 경북 구미시, 경기 수원시 장안구) 또는 5자리 시군구코드(예: 47190)"),
           keyword: z.string().max(100).optional().describe("상호·주소 검색어 (선택)"),
           months: z.number().int().min(1).max(MAX_MONTHS).default(defaultMonths()).describe("최근 몇 개월 (이번 달 포함)"),
           category: z.enum(CATEGORY_OPTIONS).default("자가용").describe("검사점검설비용도구분"),

@@ -11,12 +11,13 @@
 
 import "../env.js";
 import { KesApiError } from "../elec/kescoClient.js";
-import { GYEONGBUK_SIGUNGU } from "../elec/regions.js";
+import { GYEONGBUK_SIGUNGU, listSigungu, resolveSido } from "../elec/regions.js";
 import { defaultMonths, searchReceivingCapacity, SearchInputError } from "../elec/service.js";
 
 interface Args {
   sigungu: string[];
   all: boolean;
+  sido?: string;
   months?: number;
   refresh: boolean;
 }
@@ -27,6 +28,7 @@ function parseArgs(argv: string[]): Args {
     const a = argv[i];
     if (a === "--sigungu") args.sigungu.push(argv[++i] ?? "");
     else if (a === "--all-gyeongbuk") args.all = true;
+    else if (a === "--sido") args.sido = argv[++i];
     else if (a === "--months") args.months = Number(argv[++i]);
     else if (a === "--refresh") args.refresh = true;
   }
@@ -35,11 +37,22 @@ function parseArgs(argv: string[]): Args {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
-  const targets = args.all ? GYEONGBUK_SIGUNGU.map((s) => s.code) : args.sigungu.filter(Boolean);
+  let targets = args.all ? GYEONGBUK_SIGUNGU.map((s) => s.code) : args.sigungu.filter(Boolean);
+  if (args.sido) {
+    const code = resolveSido(args.sido);
+    if (!code) {
+      console.error(`시도를 찾지 못했습니다: ${args.sido}`);
+      process.exitCode = 1;
+      return;
+    }
+    // 시 아래 구는 시 코드로 함께 받으므로 제외한다
+    targets = listSigungu(code).filter((s) => !s.isDistrict).map((s) => s.code);
+  }
   if (targets.length === 0) {
     console.error(
       "사용법: node dist/scripts/kescoPrefetch.js --sigungu <시군 이름 또는 5자리 코드> [--months N] [--refresh]\n" +
-        "        node dist/scripts/kescoPrefetch.js --all-gyeongbuk [--months N]"
+        "        node dist/scripts/kescoPrefetch.js --all-gyeongbuk [--months N]\n" +
+        "        node dist/scripts/kescoPrefetch.js --sido 경기 [--months N]"
     );
     process.exitCode = 1;
     return;

@@ -8,6 +8,7 @@
   const el = {
     status: $("status"),
     form: $("search-form"),
+    sido: $("sido"),
     sigungu: $("sigungu"),
     codeField: $("code-field"),
     code: $("sigungu-code"),
@@ -39,6 +40,7 @@
   let source = null;
   let gotResult = false;
   let chatSessionId = null;
+  let allRegions = [];
 
   function node(tag, text, className) {
     const n = document.createElement(tag);
@@ -66,18 +68,15 @@
         chip("Claude API 키", s.claudeKeyConfigured),
         node("li", `AI 모델: ${s.model}`, "chip")
       );
-      const options = [node("option", "시군을 고르십시오", null)];
-      options[0].value = "";
-      for (const r of s.regions) {
-        const o = node("option", r.name);
-        o.value = r.code;
-        if (r.note) o.title = r.note;
-        options.push(o);
-      }
-      const other = node("option", "기타 지역 (시군구코드 직접 입력)");
-      other.value = "__code__";
-      options.push(other);
-      el.sigungu.replaceChildren(...options);
+      allRegions = s.regions;
+      const sidoOptions = s.sidoList.map((x) => {
+        const o = node("option", x.name);
+        o.value = x.code;
+        return o;
+      });
+      el.sido.replaceChildren(...sidoOptions);
+      el.sido.value = s.defaultSido;
+      fillSigungu();
       el.months.value = String(s.defaultMonths);
       el.months.max = String(s.maxMonths);
       fillList($("about-legal"), s.legalBasis);
@@ -90,6 +89,25 @@
       el.status.replaceChildren(node("li", "서버 설정을 불러오지 못했습니다. 서버가 켜져 있는지 확인하십시오.", "chip missing"));
     }
   }
+
+  function fillSigungu() {
+    const first = node("option", "시군구를 고르십시오");
+    first.value = "";
+    const options = [first];
+    for (const r of allRegions.filter((x) => x.sidoCode === el.sido.value)) {
+      const o = node("option", r.isDistrict ? `　${r.name}` : r.name);
+      o.value = r.code;
+      if (r.note) o.title = r.note;
+      options.push(o);
+    }
+    const other = node("option", "시군구코드 직접 입력");
+    other.value = "__code__";
+    options.push(other);
+    el.sigungu.replaceChildren(...options);
+    el.codeField.hidden = true;
+  }
+
+  el.sido.addEventListener("change", fillSigungu);
 
   el.sigungu.addEventListener("change", () => {
     el.codeField.hidden = el.sigungu.value !== "__code__";
@@ -181,7 +199,7 @@
     let sigungu = el.sigungu.value;
     if (sigungu === "__code__") sigungu = el.code.value.trim();
     if (!sigungu) {
-      showSearchError("시군을 고르십시오.");
+      showSearchError("시군구를 고르십시오.");
       return;
     }
     if (!/^\d{5}$/.test(sigungu)) {

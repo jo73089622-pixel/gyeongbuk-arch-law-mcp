@@ -35,7 +35,8 @@ test("첫 화면과 설정 정보를 보낸다 (인증키 값은 보내지 않�
   assert.match(page.headers.get("content-security-policy") ?? "", /default-src 'self'/);
 
   const status = await (await fetch(`${base}/api/status`)).json();
-  assert.equal(status.regions.length, 22);
+  assert.equal(status.regions.length, 269);
+  assert.equal(status.sidoList.length, 16);
   assert.equal(typeof status.kescoKeyConfigured, "boolean");
   assert.equal(JSON.stringify(status).includes(process.env.KESCO_API_KEY || "@@없음@@"), false);
 });

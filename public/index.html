@@ -10,7 +10,7 @@
 <body>
   <header class="site-header">
     <div class="wrap">
-      <p class="eyebrow">경상북도 · 전기안전 공개정보</p>
+      <p class="eyebrow">전국 · 전기안전 공개정보</p>
       <h1>건축물 수전설비 용량 조회</h1>
       <p class="lead">한국전기안전공사가 공개하는 검사·점검 기록에서 시설의 수전전압과 수전용량을 찾습니다.</p>
       <ul id="status" class="status" aria-live="polite">
@@ -25,9 +25,15 @@
       <form id="search-form" novalidate>
         <div class="grid">
           <label class="field">
-            <span>시군</span>
-            <select id="sigungu" required>
+            <span>시도</span>
+            <select id="sido" required>
               <option value="">불러오는 중…</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>시군구</span>
+            <select id="sigungu" required>
+              <option value="">시도를 먼저 고르십시오</option>
             </select>
           </label>
           <label class="field" id="code-field" hidden>

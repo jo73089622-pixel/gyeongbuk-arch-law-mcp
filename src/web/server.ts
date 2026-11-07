@@ -16,7 +16,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PROJECT_ROOT } from "../config.js";
 import { KesApiError } from "../elec/kescoClient.js";
-import { GYEONGBUK_SIGUNGU } from "../elec/regions.js";
+import { ALL_SIGUNGU, REGION_SOURCE, SIDO_LIST } from "../elec/regions.js";
 import {
   CATEGORY_OPTIONS,
   defaultMonths,
@@ -107,7 +107,10 @@ function statusPayload() {
     defaultMonths: defaultMonths(),
     maxMonths: MAX_MONTHS,
     categories: CATEGORY_OPTIONS,
-    regions: GYEONGBUK_SIGUNGU,
+    sidoList: SIDO_LIST,
+    regions: ALL_SIGUNGU,
+    regionSource: REGION_SOURCE,
+    defaultSido: "47",
     legalBasis: LEGAL_BASIS,
     dataSources: DATA_SOURCE_LINES,
     limitations: LIMITATIONS,

@@ -11,7 +11,7 @@
 import { DEFAULT_CACHE_DIR, isCacheFresh, readCache, writeCache } from "./cache.js";
 import { fetchKesMonth, KesApiError, type KesMonthQuery, type KesMonthResponse } from "./kescoClient.js";
 import { normalizeRecord } from "./normalize.js";
-import { resolveSigungu, type ResolvedRegion } from "./regions.js";
+import { lookupRegion, type ResolvedRegion } from "./regions.js";
 import { LEGAL_BASIS, LIMITATIONS, OFFICIAL_LOOKUP_URL, UNVERIFIED_ITEMS } from "./sources.js";
 import { RECEIVING_UNIT_NOTE, type CapacityRecord, type KesService } from "./types.js";
 
@@ -154,12 +154,18 @@ function clampInt(value: number | undefined, min: number, max: number, fallback:
 }
 
 export async function searchReceivingCapacity(params: SearchParams, deps: SearchDeps = {}): Promise<SearchResult> {
-  const region = resolveSigungu(params.sigungu ?? "");
-  if (!region) {
+  const lookup = lookupRegion(params.sigungu ?? "");
+  if ("candidates" in lookup) {
     throw new SearchInputError(
-      `지역을 찾지 못했습니다: '${params.sigungu}'. 경상북도 시군 이름(예: 구미시) 또는 5자리 시군구코드(예: 47190)를 입력하십시오.`
+      `'${params.sigungu}'에 해당하는 지역이 여러 곳입니다: ${lookup.candidates.join(", ")}. 시도 이름을 붙여 다시 입력하십시오(예: 서울 중구).`
     );
   }
+  if (!("region" in lookup)) {
+    throw new SearchInputError(
+      `지역을 찾지 못했습니다: '${params.sigungu}'. 시도와 시군구 이름(예: 경북 구미시, 경기 수원시 장안구) 또는 5자리 시군구코드(예: 47190)를 입력하십시오.`
+    );
+  }
+  const region = lookup.region;
 
   const months = clampInt(params.months, MIN_MONTHS, MAX_MONTHS, defaultMonths());
   const limit = clampInt(params.limit, 1, MAX_LIMIT, DEFAULT_LIMIT);
@@ -295,7 +301,7 @@ export async function searchReceivingCapacity(params: SearchParams, deps: Search
   if (region.note) notes.push(`지역 유의사항: ${region.note}`);
   if (latestOnly) notes.push("같은 상호·주소·호기번호의 기록은 검사일이 가장 최근인 1건만 표시했습니다.");
   if (region.district) {
-    notes.push(`포항시 전체 자료에서 주소에 '${region.district}'가 있는 기록만 남겼습니다(제외 ${districtExcluded}건, 주소가 비어 있는 기록 포함).`);
+    notes.push(`시 전체 자료에서 주소에 '${region.district}'가 있는 기록만 남겼습니다(제외 ${districtExcluded}건, 주소가 비어 있는 기록 포함).`);
   }
   if (uncategorizedExcluded > 0) {
     notes.push(`설비용도구분 값이 없는 기록 ${uncategorizedExcluded}건은 '${category}' 조건에서 제외했습니다. '전체'로 조회하면 볼 수 있습니다.`);

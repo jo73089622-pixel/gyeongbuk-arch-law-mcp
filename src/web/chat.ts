@@ -12,7 +12,7 @@ import { randomUUID } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { KesApiError } from "../elec/kescoClient.js";
-import { GYEONGBUK_SIGUNGU } from "../elec/regions.js";
+import { listSigungu, resolveSido, SIDO_LIST } from "../elec/regions.js";
 import {
   CATEGORY_OPTIONS,
   defaultMonths,
@@ -67,7 +67,7 @@ const SYSTEM_PROMPT = [
   "[답변 원칙]",
   "1. 수전설비의 용량·전압·검사 기록에 관한 사실은 반드시 search_receiving_capacity 도구 결과에서만 가져옵니다. 도구 결과에 없는 수치·상호·주소·날짜를 만들거나 추정하지 않습니다.",
   `2. 도구 결과가 0건이거나 오류이면 "확인되지 않습니다"라고 분명히 말하고, 지역·기간·검색어를 바꿔 보도록 안내하며, 공식 확인처(전기안전종합정보시스템 「검사·점검이력정보」 ${OFFICIAL_LOOKUP_URL})를 알려 줍니다.`,
-  "3. 어느 시군인지 알 수 없으면 조회하지 말고 먼저 묻습니다. 경상북도 밖의 지역은 5자리 시군구코드가 있어야 조회할 수 있습니다.",
+  "3. 어느 시군구인지 알 수 없으면 조회하지 말고 먼저 묻습니다. 전국을 조회할 수 있으며, '중구'처럼 여러 시도에 있는 이름은 시도를 붙여(예: 서울 중구) 조회합니다. 시도를 밝히지 않으면 경상북도로 가정하지 말고 확인합니다.",
   "4. 답변 맨 앞에 '핵심 결론'(상호, 소재지, 수전용량 kW, 수전전압 V, 검사일, 검사종류)을 두고, 그 아래에 근거(출처, 조회기간, 단위 근거)를 적습니다.",
   "5. 결과가 여러 건이고 질문한 건물이 어느 것인지 확실하지 않으면 후보를 나열하고 사용자에게 확인을 요청합니다. 임의로 하나를 골라 단정하지 않습니다.",
   "6. 상호명이 일부 가려져 있거나 주소에 번지가 없으면, 질문한 건물과 같은 시설인지 단정할 수 없다고 밝힙니다.",
@@ -87,7 +87,7 @@ const SYSTEM_PROMPT = [
   "[확인 필요 사항 — 실제 응답으로 아직 확인되지 않음]",
   ...UNVERIFIED_ITEMS.map((l) => `- ${l}`),
   "",
-  `[경상북도 시군] ${GYEONGBUK_SIGUNGU.map((s) => s.name).join(", ")} (군위군은 2023. 7. 1. 대구광역시로 편입)`,
+  `[시도] ${SIDO_LIST.map((s) => s.name).join(", ")} — 시군구 목록은 list_regions 도구로 확인합니다.`,
 ].join("\n");
 
 const TOOLS: Anthropic.Beta.BetaTool[] = [
@@ -100,7 +100,7 @@ const TOOLS: Anthropic.Beta.BetaTool[] = [
     input_schema: {
       type: "object",
       properties: {
-        sigungu: { type: "string", description: "경상북도 시군 이름(예: 구미시) 또는 5자리 시군구코드(예: 47190)" },
+        sigungu: { type: "string", description: "시도+시군구 이름(예: 경북 구미시, 경기 수원시 장안구) 또는 5자리 시군구코드(예: 47190)" },
         keyword: {
           type: "string",
           description: "상호·주소 검색어. 공백으로 나눈 낱말을 모두 포함하는 기록만 찾는다. 번지는 응답에 없을 수 있다.",
@@ -130,8 +130,12 @@ const TOOLS: Anthropic.Beta.BetaTool[] = [
   },
   {
     name: "list_regions",
-    description: "조회할 수 있는 경상북도 시군 이름과 5자리 시군구코드 목록을 돌려준다.",
-    input_schema: { type: "object", properties: {}, additionalProperties: false },
+    description: "시도의 시군구 이름과 5자리 시군구코드 목록을 돌려준다. sido 없이 부르면 시도 목록을 돌려준다.",
+    input_schema: {
+      type: "object",
+      properties: { sido: { type: "string", description: "시도 이름(예: 경기, 경상북도) 또는 2자리 코드" } },
+      additionalProperties: false,
+    },
   },
 ];
 
@@ -195,12 +199,13 @@ async function runTool(
   search: SearchFn
 ): Promise<Anthropic.Beta.BetaToolResultBlockParam> {
   if (block.name === "list_regions") {
-    calls.push({ name: block.name, summary: "조회 가능 지역 확인", ok: true });
-    return {
-      type: "tool_result",
-      tool_use_id: block.id,
-      content: JSON.stringify(GYEONGBUK_SIGUNGU.map((s) => ({ 이름: s.name, 시군구코드: s.code, 유의사항: s.note ?? null }))),
-    };
+    const sidoInput = (block.input as { sido?: unknown }).sido;
+    const code = typeof sidoInput === "string" ? resolveSido(sidoInput) : undefined;
+    calls.push({ name: block.name, summary: `지역 목록 확인${code ? ` (${sidoInput})` : ""}`, ok: true });
+    const content = code
+      ? listSigungu(code).map((s) => ({ 이름: s.name, 시군구코드: s.code, 유의사항: s.note ?? null }))
+      : SIDO_LIST.map((s) => ({ 시도: s.name, 코드: s.code }));
+    return { type: "tool_result", tool_use_id: block.id, content: JSON.stringify(content) };
   }
 
   if (block.name !== "search_receiving_capacity") {
