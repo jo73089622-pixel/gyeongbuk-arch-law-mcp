@@ -9,8 +9,8 @@
  *   따라 시군구코드 5자리 중 3~4번째 자리(2자리)를 사용한다.
  * - 경상북도 시군구코드: 국토교통부 건축HUB 법정동코드.
  *
- * ⚠️ 확인 필요: 구군코드가 2자리이므로 포항시 남구(47111)·북구(47113)는 구분하지 않고
- *   포항시(47110) 하나로 조회한다. 실제 API 응답으로 확인되지 않았다.
+ * 실측(2026-11-07, 2026년 10월분): gugun=11 은 포항시 남구·북구 기록을 함께 돌려주고(남구 130·북구 101건),
+ *   3자리(111·113)는 0건이었다. 그래서 포항시(47110)로 조회한 뒤 구는 주소 글자로 거른다.
  */
 
 export interface KesSido {
@@ -61,7 +61,7 @@ export const GYEONGBUK_SIGUNGU: readonly Sigungu[] = [
     code: "47110",
     name: "포항시",
     sidoName: "경상북도",
-    note: "남구(47111)·북구(47113)를 함께 조회합니다. 구군코드 2자리로는 구를 나눌 수 없어 실제 응답으로 확인이 필요합니다.",
+    note: "남구·북구를 함께 조회합니다(실측: API는 구 단위 코드를 받지 않음). 구만 보려면 '포항시 남구'처럼 입력하면 주소로 거릅니다.",
   },
   { code: "47130", name: "경주시", sidoName: "경상북도" },
   { code: "47150", name: "김천시", sidoName: "경상북도" },
@@ -86,10 +86,10 @@ export const GYEONGBUK_SIGUNGU: readonly Sigungu[] = [
   { code: "47940", name: "울릉군", sidoName: "경상북도" },
 ];
 
-/** 포항시 구 단위 코드는 시 단위(47110)로 모아 조회한다. */
-const SIGUNGU_ALIASES: Readonly<Record<string, string>> = {
-  "47111": "47110",
-  "47113": "47110",
+/** 포항시 구 단위 코드는 시 단위(47110)로 조회하고, 구는 주소 글자로 거른다. */
+const SIGUNGU_ALIASES: Readonly<Record<string, { code: string; district: string }>> = {
+  "47111": { code: "47110", district: "남구" },
+  "47113": { code: "47110", district: "북구" },
 };
 
 export interface KesRegion {
@@ -105,6 +105,8 @@ export interface ResolvedRegion extends KesRegion {
   note?: string;
   /** 경상북도 목록에 있는 지역인지 (아니면 코드 직접 입력) */
   listed: boolean;
+  /** 구 단위 조회(예: 포항시 남구) — 주소에 이 글자가 있는 기록만 남긴다 */
+  district?: string;
 }
 
 function compact(text: string): string {
@@ -135,7 +137,8 @@ export function resolveSigungu(input: string): ResolvedRegion | undefined {
   if (!raw) return undefined;
 
   if (/^\d{5}$/.test(raw)) {
-    const code = SIGUNGU_ALIASES[raw] ?? raw;
+    const alias = SIGUNGU_ALIASES[raw];
+    const code = alias?.code ?? raw;
     const listed = GYEONGBUK_SIGUNGU.find((s) => s.code === code);
     let kes: KesRegion;
     try {
@@ -144,7 +147,15 @@ export function resolveSigungu(input: string): ResolvedRegion | undefined {
       return undefined; // 전기안전종합정보시스템 시도코드 목록에 없는 코드
     }
     if (listed) {
-      return { ...kes, code, name: `${listed.sidoName} ${listed.name}`, note: listed.note, listed: true };
+      const district = alias?.district;
+      return {
+        ...kes,
+        code,
+        name: `${listed.sidoName} ${listed.name}${district ? ` ${district}` : ""}`,
+        note: listed.note,
+        listed: true,
+        ...(district ? { district } : {}),
+      };
     }
     const sidoName = KES_SIDO.find((s) => s.code === kes.sido)?.name ?? "";
     return {
@@ -156,7 +167,9 @@ export function resolveSigungu(input: string): ResolvedRegion | undefined {
     };
   }
 
-  const text = compact(raw).replace(/^(경상북도|경북)/, "").replace(/(남구|북구)$/, "");
+  const stripped = compact(raw).replace(/^(경상북도|경북)/, "");
+  const districtMatch = stripped.match(/(남구|북구)$/);
+  const text = stripped.replace(/(남구|북구)$/, "");
   if (!text) return undefined;
   const match = GYEONGBUK_SIGUNGU.find((s) => {
     const full = compact(s.name);
@@ -164,5 +177,13 @@ export function resolveSigungu(input: string): ResolvedRegion | undefined {
     return text === full || text === short;
   });
   if (!match) return undefined;
-  return { ...toKesRegion(match.code), code: match.code, name: `${match.sidoName} ${match.name}`, note: match.note, listed: true };
+  const district = match.code === "47110" ? districtMatch?.[1] : undefined;
+  return {
+    ...toKesRegion(match.code),
+    code: match.code,
+    name: `${match.sidoName} ${match.name}${district ? ` ${district}` : ""}`,
+    note: match.note,
+    listed: true,
+    ...(district ? { district } : {}),
+  };
 }

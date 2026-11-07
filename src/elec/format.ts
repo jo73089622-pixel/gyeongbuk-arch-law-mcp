@@ -11,6 +11,7 @@ function cell(value: string | number | null | undefined): string {
 }
 
 function num(value: number | null, raw: string | null): string {
+  if (value === 0) return "0(원문 값)";
   if (value !== null) return value.toLocaleString("ko-KR");
   return raw ? `${raw}(원문)` : "-";
 }

@@ -115,6 +115,7 @@
   }
 
   function numCell(value, raw) {
+    if (value === 0) return "0 (원문 값)";
     if (value !== null && value !== undefined) return fmt.format(value);
     return raw ? `${raw} (원문)` : "-";
   }

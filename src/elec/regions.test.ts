@@ -34,14 +34,16 @@ test("시군 이름을 여러 형태로 입력해도 같은 지역으로 인식�
   }
 });
 
-test("포항시 남구·북구는 포항시(47110) 하나로 조회하고 유의사항을 단다", () => {
-  for (const input of ["포항시 남구", "포항시북구", "47111", "47113", "포항"]) {
+test("포항시 남구·북구는 포항시(47110)로 조회하고 구는 주소로 거른다 (실측 반영)", () => {
+  const cases: Array<[string, string | undefined]> = [["포항시 남구", "남구"], ["포항시북구", "북구"], ["47111", "남구"], ["47113", "북구"], ["포항", undefined], ["47110", undefined]];
+  for (const [input, district] of cases) {
     const r = resolveSigungu(input);
     assert.ok(r, input);
     assert.equal(r.code, "47110", input);
     assert.equal(r.gugun, "11");
-    assert.match(r.note ?? "", /확인이 필요/);
+    assert.equal(r.district, district, input);
   }
+  assert.equal(resolveSigungu("47111")?.name, "경상북도 포항시 남구");
 });
 
 test("찾을 수 없는 지역은 추측하지 않고 undefined", () => {

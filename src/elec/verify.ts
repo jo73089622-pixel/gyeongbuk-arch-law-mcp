@@ -49,6 +49,10 @@ export interface RecordSummary {
   category: Record<string, number>;
   inspectionType: Record<string, number>;
   equipmentType: Record<string, number>;
+  /** 페이지 나눔 관련 항목의 값 (개인정보 아님) */
+  paging: Record<string, string[]>;
+  /** SIDO·SIGUNGU 항목의 값 */
+  regionCodes: Record<string, string[]>;
   /** 주소에 '남구'·'북구'가 들어간 기록 수 (포항 구 구분 확인용) */
   district: { 남구: number; 북구: number; 둘다아님: number };
 }
@@ -90,6 +94,15 @@ export function summarizeRecords(rawRecords: KesRawRecord[]): RecordSummary {
     category: count(rows, (r) => text(r, "INSPCT_DIV") || "(없음)"),
     inspectionType: count(rows, (r) => text(r, "RCEPT_TY") || "(없음)"),
     equipmentType: count(rows, (r) => text(r, "EQP_TY") || "(없음)"),
+    paging: Object.fromEntries(
+      ["IS_PAGING", "PAGE_INDEX", "PAGE_SIZE", "PAGE_UNIT", "RECORD_COUNT_PER_PAGE", "FIRST_INDEX", "LAST_INDEX", "S_DATE", "E_DATE"].map((k) => [
+        k,
+        [...new Set(rows.map((r) => text(r, k)))].slice(0, 5),
+      ])
+    ),
+    regionCodes: Object.fromEntries(
+      ["SIDO", "SIGUNGU", "S_SIDO"].map((k) => [k, [...new Set(rows.map((r) => text(r, k)))].slice(0, 8)])
+    ),
     district: {
       남구: allAddr.filter((a) => a.includes("남구")).length,
       북구: allAddr.filter((a) => a.includes("북구")).length,

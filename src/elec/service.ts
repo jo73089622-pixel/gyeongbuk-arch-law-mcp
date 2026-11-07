@@ -241,6 +241,17 @@ export async function searchReceivingCapacity(params: SearchParams, deps: Search
     });
   }
 
+  // 1-2) 구 단위(포항시 남구·북구): 주소에 구 이름이 있는 기록만
+  let districtExcluded = 0;
+  if (region.district) {
+    const d = region.district;
+    filtered = filtered.filter((r) => {
+      const ok = `${r.lotAddress ?? ""} ${r.roadAddress ?? ""}`.includes(d);
+      if (!ok) districtExcluded += 1;
+      return ok;
+    });
+  }
+
   // 2) 상호·주소 검색어 (낱말 모두 포함, 띄어쓰기·대소문자 무시)
   if (keyword) {
     const terms = keyword.split(/\s+/).map(compactLower).filter(Boolean);
@@ -283,13 +294,16 @@ export async function searchReceivingCapacity(params: SearchParams, deps: Search
   ];
   if (region.note) notes.push(`지역 유의사항: ${region.note}`);
   if (latestOnly) notes.push("같은 상호·주소·호기번호의 기록은 검사일이 가장 최근인 1건만 표시했습니다.");
+  if (region.district) {
+    notes.push(`포항시 전체 자료에서 주소에 '${region.district}'가 있는 기록만 남겼습니다(제외 ${districtExcluded}건, 주소가 비어 있는 기록 포함).`);
+  }
   if (uncategorizedExcluded > 0) {
     notes.push(`설비용도구분 값이 없는 기록 ${uncategorizedExcluded}건은 '${category}' 조건에서 제외했습니다. '전체'로 조회하면 볼 수 있습니다.`);
   }
   if (failedMonths.length > 0) {
     notes.push(`⚠️ ${failedMonths.length}개월은 연결·응답 오류로 받지 못해 결과가 불완전합니다. 잠시 후 다시 조회하십시오.`);
   }
-  notes.push(`확인 필요(인증키 발급 후 실제 응답으로 검증): ${UNVERIFIED_ITEMS.join(" / ")}`);
+  if (UNVERIFIED_ITEMS.length > 0) notes.push(`확인 필요: ${UNVERIFIED_ITEMS.join(" / ")}`);
 
   return {
     region,

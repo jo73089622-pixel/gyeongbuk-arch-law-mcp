@@ -196,3 +196,32 @@ test("결과에는 개인 성명이 들어가지 않는다", async () => {
   for (const value of ["대**", "박**", "시공업체대표자명"]) assert.equal(text.includes(value), false, value);
   assert.match(formatSearchMarkdown(r), /수전용량\(kW\)/);
 });
+
+test("포항시 남구로 조회하면 포항시 전체 자료에서 주소에 '남구'가 있는 기록만 남긴다", async () => {
+  const r = await searchReceivingCapacity(
+    { sigungu: "포항시 남구", months: 1 },
+    {
+      apiKey: "K",
+      cacheDir: tmpDir(),
+      now: NOW,
+      delayMs: 0,
+      fetchMonth: fakeFetch({
+        "202611": [
+          rec({ CMPNM: "갑", LNM_ADRES: "경상북도 포항시 남구 대잠동 1", RN_ADRES: null }),
+          rec({ CMPNM: "을", LNM_ADRES: "경상북도 포항시 북구 양덕동 2", RN_ADRES: null }),
+        ],
+      }),
+    }
+  );
+  assert.deepEqual(r.records.map((x) => x.businessName), ["갑"]);
+  assert.ok(r.notes.some((n) => n.includes("제외 1건")));
+});
+
+test("수전용량 0은 원문 값임을 표시한다", async () => {
+  const r = await searchReceivingCapacity(
+    { sigungu: "구미시", months: 1 },
+    { apiKey: "K", cacheDir: tmpDir(), now: NOW, delayMs: 0, fetchMonth: fakeFetch({ "202611": [rec({ TRANSELE_CPCTY: "0" })] }) }
+  );
+  assert.equal(r.records[0].receivingCapacityKw, 0);
+  assert.match(formatSearchMarkdown(r), /0\(원문 값\)/);
+});

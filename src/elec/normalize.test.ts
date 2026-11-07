@@ -59,3 +59,9 @@ test("숫자로 읽을 수 없는 값은 null로 두고 원문은 보존한다",
   assert.equal(r.receivingCapacityKw, null);
   assert.equal(r.raw.receivingCapacity, "약 300");
 });
+
+test("실측 응답에 있던 안전관리업체·시공업체 대표자 항목도 내보내지 않는다", () => {
+  const r = normalizeRecord({ CMPNM: "갑", SFMNG_RPSR_NM: "홍길동", CNSTRCT_RPSR_NM: "김철수", SFMNG_CMPNM: "을전기", CNSTRCT_CMPNM: "병건설" }, "202610");
+  const json = JSON.stringify(r);
+  for (const v of ["홍길동", "김철수", "을전기", "병건설"]) assert.equal(json.includes(v), false, v);
+});
