@@ -36,8 +36,8 @@ const MAX_TURNS_PER_SESSION = 20;
 const MAX_SESSIONS = 50;
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 const CHAT_RESULT_LIMIT_DEFAULT = 20;
-/** 사용자 요청(2026-11-07)으로 50 → 200 상향. 건수가 많을수록 질문당 입력 토큰(요금)이 늘어난다. */
-const CHAT_RESULT_LIMIT_MAX = 200;
+/** 사용자 요청(2026-11-07)으로 50 → 500 상향. 건수가 많을수록 질문당 입력 토큰(요금)이 늘어난다. */
+const CHAT_RESULT_LIMIT_MAX = 500;
 
 export class ChatError extends Error {
   constructor(

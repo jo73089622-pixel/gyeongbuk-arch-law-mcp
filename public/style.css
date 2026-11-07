@@ -232,3 +232,5 @@ td .sub { display: block; color: var(--muted); font-size: 0.82rem; }
   .grid { grid-template-columns: minmax(0, 1fr); }
   .field.wide { grid-column: auto; }
 }
+
+.result-actions { margin: 0 0 10px; }

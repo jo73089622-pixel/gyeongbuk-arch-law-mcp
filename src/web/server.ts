@@ -173,7 +173,7 @@ async function handleSearch(req: http.IncomingMessage, res: http.ServerResponse,
         category,
         latestOnly: parseBool(url.searchParams.get("latestOnly"), true),
         refresh: parseBool(url.searchParams.get("refresh"), false),
-        limit: Math.min(parseIntParam(url.searchParams.get("limit")) ?? 200, MAX_LIMIT),
+        limit: Math.min(parseIntParam(url.searchParams.get("limit")) ?? MAX_LIMIT, MAX_LIMIT),
       },
       { signal: controller.signal, onProgress: (p) => send("progress", p) }
     );

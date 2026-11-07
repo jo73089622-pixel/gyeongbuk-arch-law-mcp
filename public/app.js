@@ -41,6 +41,7 @@
   let gotResult = false;
   let chatSessionId = null;
   let allRegions = [];
+  let lastResult = null;
 
   function node(tag, text, className) {
     const n = document.createElement(tag);
@@ -139,7 +140,9 @@
   }
 
   function renderResult(result) {
+    lastResult = result;
     el.resultSection.hidden = false;
+    $("csv-btn").disabled = result.records.length === 0;
     const c = result.counts;
     const parts = [
       `${result.region.name}`,
@@ -255,6 +258,45 @@
       setSearching(false);
     });
   });
+
+  // ---- 엑셀(CSV) 내려받기: 화면에 받은 결과(최대 500건)를 그대로 파일로 저장 ----
+  function csvCell(v) {
+    let s = v === null || v === undefined ? "" : String(v);
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; // 엑셀 수식으로 실행되지 않게 막음
+    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+
+  function downloadCsv() {
+    if (!lastResult || lastResult.records.length === 0) return;
+    const head = ["상호", "도로명주소", "지번주소", "수전전압(V)", "수전용량(kW)", "발전전압(V)", "발전용량(kW)", "구분", "검사점검타입", "검사점검종류", "검사일", "결과", "안전등급", "업종", "조회연월"];
+    const num = (v, raw) => (v !== null && v !== undefined ? v : raw ?? "");
+    const rows = lastResult.records.map((r) => [
+      r.businessName, r.roadAddress, r.lotAddress,
+      num(r.receivingVoltageV, r.raw.receivingVoltage), num(r.receivingCapacityKw, r.raw.receivingCapacity),
+      num(r.generationVoltageV, r.raw.generationVoltage), num(r.generationCapacityKw, r.raw.generationCapacity),
+      r.category, r.inspectionType, r.inspectionKind, r.inspectionEnd ?? r.inspectionStart, r.result, r.safetyGrade, r.industry,
+      `${r.sourceMonth.slice(0, 4)}-${r.sourceMonth.slice(4)}`,
+    ]);
+    const c = lastResult.counts;
+    const info = [
+      [`출처: 한국전기안전공사 전기안전종합정보시스템 OpenAPI(검사점검이력정보) / 지역: ${lastResult.region.name} / 기간: ${lastResult.period.from}~${lastResult.period.to} / 구분: ${lastResult.query.category} / 검색어: ${lastResult.query.keyword ?? "없음"}`],
+      [`표시 ${c.returnedRecords}건${c.truncated ? ` (조건에 맞는 ${c.distinctRecords}건 중 일부 — 검색어로 좁혀 다시 받으십시오)` : ""} / 수전전압 단위 V·수전용량 단위 kW(공사 조회화면 표기 기준) / 참고용이며 공식 확인은 한국전기안전공사`],
+      [],
+    ];
+    const text = [...info, head, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n");
+    const blob = new Blob(["\uFEFF" + text], { type: "text/csv;charset=utf-8" }); // 엑셀에서 한글이 깨지지 않도록 BOM 추가
+    const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    // 한글 파일 이름은 일부 브라우저에서 무시되어(시험 확인) 영문·숫자로 짓는다. 예: sujeon_47190_20261107.csv
+    a.download = `sujeon_${lastResult.region.sigunguCode ?? lastResult.region.code ?? "region"}_${stamp}.csv`;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  $("csv-btn").addEventListener("click", downloadCsv);
 
   el.cancelBtn.addEventListener("click", () => {
     gotResult = true;
