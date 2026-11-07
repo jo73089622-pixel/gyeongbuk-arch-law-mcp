@@ -225,3 +225,24 @@ test("수전용량 0은 원문 값임을 표시한다", async () => {
   assert.equal(r.records[0].receivingCapacityKw, 0);
   assert.match(formatSearchMarkdown(r), /0\(원문 값\)/);
 });
+
+test("행정구역 개편 지역은 새·옛 코드를 모두 조회해 같은 기록은 한 번만 합친다", async () => {
+  const calls: KesMonthQuery[] = [];
+  const same = rec({ CMPNM: "공통" });
+  const r = await searchReceivingCapacity(
+    { sigungu: "광주 동구", months: 1, category: "전체", latestOnly: false },
+    {
+      apiKey: "K",
+      cacheDir: tmpDir(),
+      now: NOW,
+      delayMs: 0,
+      fetchMonth: async (q) => {
+        calls.push(q);
+        const records = q.sido === "12" ? [same, rec({ CMPNM: "새코드" })] : [same, rec({ CMPNM: "옛코드" })];
+        return { records, envelopePath: "result", message: null };
+      },
+    }
+  );
+  assert.deepEqual(calls.map((c) => `${c.sido}-${c.gugun}`), ["12-21", "29-11"]);
+  assert.deepEqual(r.records.map((x) => x.businessName).sort(), ["공통", "새코드", "옛코드"]);
+});

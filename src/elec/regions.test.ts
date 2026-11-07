@@ -1,16 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ALL_SIGUNGU, GYEONGBUK_SIGUNGU, KES_SIDO, lookupRegion, resolveSido, resolveSigungu, SIDO_LIST, toKesRegion } from "./regions.js";
+import { ALL_SIGUNGU, GYEONGBUK_SIGUNGU, KES_SIDO, kesQueriesFor, lookupRegion, resolveSido, resolveSigungu, SIDO_LIST, toKesRegion } from "./regions.js";
 
 test("명세 예시(sido=45, gugun=71)와 같은 규칙으로 시군구코드를 변환한다", () => {
   assert.deepEqual(toKesRegion("45710"), { sido: "45", gugun: "71" }); // 전북 완주군
   assert.deepEqual(toKesRegion("47190"), { sido: "47", gugun: "19" }); // 경북 구미시
 });
 
-test("현행 강원·전북 시도코드(51·52)는 전기안전종합정보시스템 코드(42·45)로 바꾼다", () => {
-  assert.deepEqual(toKesRegion("52710"), { sido: "45", gugun: "71" });
-  assert.deepEqual(toKesRegion("51110"), { sido: "42", gugun: "11" });
-});
 
 test("시군구코드가 5자리 숫자가 아니면 오류", () => {
   assert.throws(() => toKesRegion("4719"));
@@ -63,9 +59,6 @@ test("다른 시도의 이름과 코드도 찾는다", () => {
   assert.equal(resolveSigungu("대구 군위군")?.code, "27720");
   assert.equal(resolveSigungu("군위군")?.code, "27720");
   assert.equal(resolveSigungu("27720")?.name, "대구광역시 군위군");
-  const suwon = resolveSigungu("경기 수원시 장안구");
-  assert.equal(suwon?.code, "41110");
-  assert.equal(suwon?.district, "장안구");
   assert.equal(resolveSigungu("수원장안구")?.sigunguCode, "41111");
   assert.equal(resolveSigungu("세종")?.code, "36110");
 });
@@ -78,12 +71,21 @@ test("여러 시도에 있는 이름은 후보를 돌려주고 추측하지 않�
   assert.ok("candidates" in g && g.candidates.length === 2);
 });
 
-test("공사 시스템 코드로 바꾼다: 강원 42·전북 45, 전남광주는 옛 29·46 코드", () => {
-  assert.deepEqual(toKesRegion("51110"), { sido: "42", gugun: "11" }); // 춘천
-  assert.deepEqual(toKesRegion("52110"), { sido: "45", gugun: "11" }); // 전주
-  assert.deepEqual(toKesRegion("12210"), { sido: "29", gugun: "11" }); // 광주 동구 → 29110
-  assert.deepEqual(toKesRegion("12740"), { sido: "46", gugun: "77" }); // 고흥군 → 46770
-  assert.match(resolveSigungu("광주 동구")?.note ?? "", /옛 코드\(29110\)/);
+test("실측에 따른 조회 코드: 강원 51, 전북 52+45, 전남광주 새+옛 코드, 인천 신설 구는 옛 구 코드도", () => {
+  assert.deepEqual(kesQueriesFor("51110"), [{ sido: "51", gugun: "11" }]);
+  assert.deepEqual(kesQueriesFor("52110"), [{ sido: "52", gugun: "11" }, { sido: "45", gugun: "11" }]);
+  assert.deepEqual(kesQueriesFor("12210"), [{ sido: "12", gugun: "21" }, { sido: "29", gugun: "11" }]);
+  assert.deepEqual(kesQueriesFor("12740"), [{ sido: "12", gugun: "74" }, { sido: "46", gugun: "77" }]);
+  assert.deepEqual(kesQueriesFor("28125"), [{ sido: "28", gugun: "12" }, { sido: "28", gugun: "11" }, { sido: "28", gugun: "14" }]);
+  assert.deepEqual(kesQueriesFor("11215"), [{ sido: "11", gugun: "21" }]);
+});
+
+test("주소에 구 이름이 없는 시(수원 등)는 구를 골라도 시 전체를 조회한다", () => {
+  const r = resolveSigungu("경기 수원시 장안구");
+  assert.equal(r?.code, "41110");
+  assert.equal(r?.district, undefined);
+  assert.match(r?.name ?? "", /수원시 전체/);
+  assert.equal(resolveSigungu("포항시 남구")?.district, "남구");
 });
 
 test("시도 이름 해석", () => {

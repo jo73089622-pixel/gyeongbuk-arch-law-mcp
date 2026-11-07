@@ -13,7 +13,7 @@ import { fetchKesMonth, KesApiError, type KesMonthQuery, type KesMonthResponse }
 import { normalizeRecord } from "./normalize.js";
 import { lookupRegion, type ResolvedRegion } from "./regions.js";
 import { LEGAL_BASIS, LIMITATIONS, OFFICIAL_LOOKUP_URL, UNVERIFIED_ITEMS } from "./sources.js";
-import { RECEIVING_UNIT_NOTE, type CapacityRecord, type KesService } from "./types.js";
+import { RECEIVING_UNIT_NOTE, type CapacityRecord, type KesRawRecord, type KesService } from "./types.js";
 
 export const CATEGORY_OPTIONS = ["자가용", "사업용", "일반용", "전체"] as const;
 export type CategoryOption = (typeof CATEGORY_OPTIONS)[number];
@@ -193,16 +193,27 @@ export async function searchReceivingCapacity(params: SearchParams, deps: Search
   for (let i = 0; i < monthList.length; i += 1) {
     const month = monthList[i];
     if (deps.signal?.aborted) throw new DOMException("조회가 취소되었습니다.", "AbortError");
-    const key = { service: SERVICE, sido: region.sido, gugun: region.gugun, month };
-    let source: SearchProgress["source"];
+    const sources: SearchProgress["source"][] = [];
+    // 같은 달을 여러 코드로 조회할 때(행정구역 개편 지역) 똑같은 기록은 한 번만 담는다.
+    const seen = new Set<string>();
+    const add = (records: KesRawRecord[]) => {
+      for (const r of records) {
+        const k = JSON.stringify(r);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        all.push(normalizeRecord(r, month));
+      }
+    };
 
-    const cached = params.refresh ? null : await readCache(cacheDir, key);
-    if (cached && isCacheFresh(cached, month, previousMonth, now)) {
-      all.push(...cached.records.map((r) => normalizeRecord(r, month)));
-      if (cached.envelopePath) envelopePaths.add(cached.envelopePath);
-      monthsFromCache += 1;
-      source = "cache";
-    } else {
+    for (const q of region.queries) {
+      const key = { service: SERVICE, sido: q.sido, gugun: q.gugun, month };
+      const cached = params.refresh ? null : await readCache(cacheDir, key);
+      if (cached && isCacheFresh(cached, month, previousMonth, now)) {
+        add(cached.records);
+        if (cached.envelopePath) envelopePaths.add(cached.envelopePath);
+        sources.push("cache");
+        continue;
+      }
       if (!apiKey) {
         throw new KesApiError(
           "auth",
@@ -212,25 +223,33 @@ export async function searchReceivingCapacity(params: SearchParams, deps: Search
       if (apiCalls > 0 && delayMs > 0) await sleep(delayMs, deps.signal);
       apiCalls += 1;
       try {
-        const res = await fetchMonth({ apiKey, service: SERVICE, searchYM: month, sido: region.sido, gugun: region.gugun });
+        const res = await fetchMonth({ apiKey, service: SERVICE, searchYM: month, sido: q.sido, gugun: q.gugun });
         if (res.message !== null) {
           monthMessages.push({ month: formatMonth(month), message: res.message });
-          source = "message";
+          sources.push("message");
         } else {
           await writeCache(cacheDir, key, { fetchedAt: now.toISOString(), envelopePath: res.envelopePath, records: res.records });
-          all.push(...res.records.map((r) => normalizeRecord(r, month)));
+          add(res.records);
           if (res.envelopePath) envelopePaths.add(res.envelopePath);
-          monthsFromApi += 1;
-          source = "api";
+          sources.push("api");
         }
       } catch (err) {
         // 인증키 오류·응답 형식 오류는 모든 달에 똑같이 생기므로 즉시 멈춘다.
         if (err instanceof KesApiError && (err.kind === "auth" || err.kind === "format")) throw err;
         if ((err as Error).name === "AbortError") throw err;
-        failedMonths.push({ month: formatMonth(month), error: (err as Error).message });
-        source = "failed";
+        failedMonths.push({ month: formatMonth(month), error: `[${q.sido}-${q.gugun}] ${(err as Error).message}` });
+        sources.push("failed");
       }
     }
+    const source: SearchProgress["source"] = sources.includes("failed")
+      ? "failed"
+      : sources.includes("api")
+        ? "api"
+        : sources.includes("message")
+          ? "message"
+          : "cache";
+    if (source === "cache") monthsFromCache += 1;
+    else if (source === "api") monthsFromApi += 1;
     deps.onProgress?.({ done: i + 1, total: monthList.length, month: formatMonth(month), source });
   }
 
@@ -292,7 +311,7 @@ export async function searchReceivingCapacity(params: SearchParams, deps: Search
   const period = { from: formatMonth(monthList[monthList.length - 1]), to: formatMonth(monthList[0]), months };
 
   const notes: string[] = [
-    `출처: 한국전기안전공사 전기안전종합정보시스템 OpenAPI(검사점검이력정보), 조회기간 ${period.from}~${period.to}(${months}개월), 지역 ${region.name}.`,
+    `출처: 한국전기안전공사 전기안전종합정보시스템 OpenAPI(검사점검이력정보), 조회기간 ${period.from}~${period.to}(${months}개월), 지역 ${region.name}(조회 코드 ${region.queries.map((q) => `${q.sido}-${q.gugun}`).join(", ")}).`,
     RECEIVING_UNIT_NOTE,
     `법적 근거: ${LEGAL_BASIS[0]} ${LEGAL_BASIS[1]}`,
     ...LIMITATIONS,
