@@ -86,7 +86,7 @@ Args:
   - category ('자가용'|'사업용'|'일반용'|'전체'): 검사점검설비용도구분 (기본 '자가용' — 수전설비 사용전검사·정기검사 대상).
   - latest_only (boolean): 같은 상호·주소·호기번호의 기록은 최신 1건만 (기본 true)
   - refresh (boolean): 저장본을 무시하고 다시 받기 (기본 false)
-  - limit (number): 최대 표시 건수 (1~500, 기본 50)
+  - limit (number): 최대 표시 건수 (1~5000, 기본 500)
   - response_format ('markdown'|'json')
 
 Returns:
@@ -103,7 +103,7 @@ Error Handling:
           category: z.enum(CATEGORY_OPTIONS).default("자가용").describe("검사점검설비용도구분"),
           latest_only: z.boolean().default(true).describe("시설별 최신 1건만"),
           refresh: z.boolean().default(false).describe("저장본 무시하고 다시 받기"),
-          limit: z.number().int().min(1).max(500).default(50).describe("최대 표시 건수 (최대 500)"),
+          limit: z.number().int().min(1).max(5000).default(500).describe("최대 표시 건수 (기본 500, 최대 5000)"),
           response_format: responseFormatSchema,
         })
         .strict(),

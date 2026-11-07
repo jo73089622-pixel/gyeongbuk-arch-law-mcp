@@ -22,7 +22,8 @@ export const MIN_MONTHS = 1;
 export const MAX_MONTHS = 60;
 export const FALLBACK_DEFAULT_MONTHS = 38;
 export const DEFAULT_LIMIT = 100;
-export const MAX_LIMIT = 500;
+/** 사용자 요청(2026-11-07)으로 500 → 5,000 상향 */
+export const MAX_LIMIT = 5000;
 
 const SERVICE: KesService = "inspctResultInfo";
 

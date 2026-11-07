@@ -35,9 +35,14 @@ const MAX_TOOL_ROUNDS = 6;
 const MAX_TURNS_PER_SESSION = 20;
 const MAX_SESSIONS = 50;
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
-const CHAT_RESULT_LIMIT_DEFAULT = 20;
-/** 사용자 요청(2026-11-07)으로 50 → 500 상향. 건수가 많을수록 질문당 입력 토큰(요금)이 늘어난다. */
-const CHAT_RESULT_LIMIT_MAX = 500;
+/** 사용자 요청(2026-11-07)으로 기본 20 → 500, 최대 500 → 5,000 상향. 건수가 많을수록 질문당 입력 토큰(요금)과 응답 시간이 늘어난다. */
+const CHAT_RESULT_LIMIT_DEFAULT = 500;
+const CHAT_RESULT_LIMIT_MAX = 5000;
+/**
+ * 도구 결과 1건의 최대 글자 수. 모델이 한 번에 읽을 수 있는 분량(약 100만 토큰)을 넘지 않도록,
+ * 이보다 길면 뒤쪽 기록을 덜어 내고 그 사실을 결과에 적는다. (표 형식 1건 ≈ 115자 → 5,000건 ≈ 58만 자)
+ */
+const CHAT_RESULT_MAX_CHARS = 700_000;
 
 export class ChatError extends Error {
   constructor(
@@ -76,7 +81,7 @@ const SYSTEM_PROMPT = [
   '8. 법령은 아래 [법적 근거]에 적힌 범위에서만 인용하고, 그 밖의 법률 판단은 "이 부분은 명확한 확인이 어렵습니다"라고 답합니다.',
   "9. 정중하고 건조하며 명확한 공문서 어조로, 비전문가도 이해하기 쉽게 씁니다. 화면이 마크다운을 표시하지 않으므로 #, **, | 같은 기호와 표는 쓰지 말고 짧은 문단과 '-' 목록으로 씁니다.",
   "10. 처음 조회하는 지역·기간은 한 달에 1회씩 API를 호출해 시간이 걸립니다. 필요한 만큼만 조회합니다.",
-  `11. 결과 건수는 기본 ${CHAT_RESULT_LIMIT_DEFAULT}건입니다. 사용자가 더 많은 목록을 원하면 limit을 최대 ${CHAT_RESULT_LIMIT_MAX}건까지 지정합니다. 결과의 건수.truncated가 true이면 표시된 것보다 기록이 더 있다는 사실과 전체 건수를 함께 알립니다.`,
+  `11. 결과 건수는 기본 ${CHAT_RESULT_LIMIT_DEFAULT}건입니다. 사용자가 더 많은 목록을 원하면 limit을 최대 ${CHAT_RESULT_LIMIT_MAX}건까지 지정합니다. 결과의 건수.truncated가 true이거나 글자수초과로덜어낸건수가 있으면 표시된 것보다 기록이 더 있다는 사실과 전체 건수를 함께 알리고, 전체 목록은 검색 화면의 엑셀(CSV) 내려받기를 안내합니다. 기록은 열이름과 행 배열의 표 형식이며, 모든 행이 비어 있는 열은 생략되어 있습니다.`,
   "",
   `[단위 근거] ${RECEIVING_UNIT_NOTE}`,
   "",
@@ -152,39 +157,64 @@ const SearchInput = z
   })
   .strict();
 
-/** 모델에 넘길 간결한 결과 (불필요한 필드는 빼서 토큰을 아낀다) */
-function compactResult(result: SearchResult): Record<string, unknown> {
-  return {
+/** 기록 1건을 모델에 넘길 열 순서대로 펼친다 */
+const RECORD_COLUMNS: Array<[string, (r: SearchResult["records"][number]) => unknown]> = [
+  ["상호", (r) => r.businessName],
+  ["도로명주소", (r) => r.roadAddress],
+  ["지번주소", (r) => r.lotAddress],
+  ["호기번호", (r) => r.unitNo],
+  ["구분", (r) => r.category],
+  ["검사점검타입", (r) => r.inspectionType],
+  ["검사점검종류", (r) => r.inspectionKind],
+  ["설비타입", (r) => r.equipmentType],
+  ["수전전압_V", (r) => r.receivingVoltageV ?? r.raw.receivingVoltage],
+  ["수전용량_kW", (r) => r.receivingCapacityKw ?? r.raw.receivingCapacity],
+  ["발전전압_V", (r) => r.generationVoltageV ?? r.raw.generationVoltage],
+  ["발전용량_kW", (r) => r.generationCapacityKw ?? r.raw.generationCapacity],
+  ["전압_V", (r) => r.voltageV ?? r.raw.voltage],
+  ["용량_kW", (r) => r.capacityKw ?? r.raw.capacity],
+  ["검사시작일", (r) => r.inspectionStart],
+  ["검사종료일", (r) => r.inspectionEnd],
+  ["결과", (r) => r.result],
+  ["안전등급", (r) => r.safetyGrade],
+  ["업종", (r) => r.industry],
+  ["조회연월", (r) => r.sourceMonth],
+];
+
+const isEmpty = (v: unknown) => v === null || v === undefined || v === "";
+
+/**
+ * 모델에 넘길 간결한 결과.
+ * 건수가 많아도(최대 5,000건) 모델 입력 한도를 넘지 않도록 기록을 "열이름 + 행 배열" 표 형식으로 보내고,
+ * 모든 행이 비어 있는 열은 뺀다. 그래도 너무 길면 뒤쪽 기록을 덜어 내고 덜어 낸 건수를 적는다.
+ */
+export function compactResult(result: SearchResult, maxChars = CHAT_RESULT_MAX_CHARS): Record<string, unknown> {
+  const full = result.records.map((r) => RECORD_COLUMNS.map(([, get]) => get(r) ?? null));
+  const keep = RECORD_COLUMNS.map((_, i) => full.some((row) => !isEmpty(row[i])));
+  const columns = RECORD_COLUMNS.filter((_, i) => keep[i]).map(([name]) => name);
+  const rows = full.map((row) => row.filter((_, i) => keep[i]));
+
+  const base = {
     지역: result.region.name,
     조회기간: `${result.period.from}~${result.period.to} (${result.period.months}개월)`,
     조건: result.query,
     건수: result.counts,
     받지못한달: result.failedMonths,
     안내문구가온달: result.monthMessages,
-    기록: result.records.map((r) => ({
-      상호: r.businessName,
-      도로명주소: r.roadAddress,
-      지번주소: r.lotAddress,
-      호기번호: r.unitNo,
-      구분: r.category,
-      검사점검타입: r.inspectionType,
-      검사점검종류: r.inspectionKind,
-      설비타입: r.equipmentType,
-      수전전압_V: r.receivingVoltageV ?? r.raw.receivingVoltage,
-      수전용량_kW: r.receivingCapacityKw ?? r.raw.receivingCapacity,
-      발전전압_V: r.generationVoltageV ?? r.raw.generationVoltage,
-      발전용량_kW: r.generationCapacityKw ?? r.raw.generationCapacity,
-      전압_V: r.voltageV ?? r.raw.voltage,
-      용량_kW: r.capacityKw ?? r.raw.capacity,
-      검사시작일: r.inspectionStart,
-      검사종료일: r.inspectionEnd,
-      결과: r.result,
-      안전등급: r.safetyGrade,
-      업종: r.industry,
-      조회연월: r.sourceMonth,
-    })),
     유의사항: result.notes,
+    열이름: columns,
   };
+  const baseLen = JSON.stringify(base).length + 64;
+  let used = baseLen;
+  let n = 0;
+  for (; n < rows.length; n++) {
+    const len = JSON.stringify(rows[n]).length + 1;
+    if (used + len > maxChars) break;
+    used += len;
+  }
+  const out: Record<string, unknown> = { ...base, 기록: rows.slice(0, n) };
+  if (n < rows.length) out.글자수초과로덜어낸건수 = rows.length - n;
+  return out;
 }
 
 export interface ToolCallSummary {

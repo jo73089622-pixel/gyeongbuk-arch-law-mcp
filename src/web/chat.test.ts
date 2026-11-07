@@ -7,7 +7,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { PROJECT_ROOT } from "../config.js";
 import { searchReceivingCapacity, type SearchParams } from "../elec/service.js";
 import type { KesRawRecord } from "../elec/types.js";
-import { ChatError, handleChat } from "./chat.js";
+import { ChatError, compactResult, handleChat } from "./chat.js";
 
 type Params = Anthropic.Beta.Messages.MessageCreateParamsNonStreaming;
 type Msg = Anthropic.Beta.BetaMessage;
@@ -83,8 +83,9 @@ test("도구로 조회한 뒤 답하고, 모델·사고 깊이·예비 모델 �
   assert.equal(toolResult.type, "tool_result");
   assert.equal(toolResult.tool_use_id, "tu_1");
   const payload = JSON.parse(toolResult.content);
-  assert.equal(payload.기록[0].상호, "가나병원");
-  assert.equal(payload.기록[0].수전용량_kW, 1500);
+  const col = (name: string) => payload.열이름.indexOf(name);
+  assert.equal(payload.기록[0][col("상호")], "가나병원");
+  assert.equal(payload.기록[0][col("수전용량_kW")], 1500);
   assert.equal(toolResult.content.includes("대**"), false);
 });
 
@@ -164,8 +165,8 @@ test("빈 질문·너무 긴 질문은 받지 않는다", async () => {
   await assert.rejects(handleChat({ message: "가".repeat(2001) }, { createMessage: async () => message("end_turn", []) }), ChatError);
 });
 
-test("AI 도우미는 최대 500건까지 받고, 501건은 입력 오류로 돌려준다", async () => {
-  for (const [limit, ok] of [[500, true], [501, false]] as const) {
+test("AI 도우미는 최대 5,000건까지 받고, 5,001건은 입력 오류로 돌려준다", async () => {
+  for (const [limit, ok] of [[5000, true], [5001, false]] as const) {
     const seen: Params[] = [];
     const tu = { type: "tool_use", id: "tu_lim", name: "search_receiving_capacity", input: { sigungu: "구미시", months: 1, limit } };
     const reply = await handleChat(
@@ -174,4 +175,31 @@ test("AI 도우미는 최대 500건까지 받고, 501건은 입력 오류로 돌
     );
     assert.equal(reply.toolCalls[0].ok, ok, String(limit));
   }
+});
+
+test("AI 도우미 결과는 표 형식으로 보내고, 빈 열은 빼며, 글자 수 한도를 넘으면 뒤쪽 기록을 덜어 낸다", async () => {
+  const many = Array.from({ length: 300 }, (_, i) => ({ ...sample, CMPNM: `시설${i}`, TRANSELE_CPCTY: "1500" }));
+  const result = await searchReceivingCapacity(
+    { sigungu: "구미시", months: 1, category: "전체", latestOnly: false, limit: 5000 },
+    {
+      apiKey: "K",
+      cacheDir: fs.mkdtempSync(path.join(os.tmpdir(), "chat-cache-")),
+      now: new Date("2026-11-05T03:00:00Z"),
+      delayMs: 0,
+      fetchMonth: async () => ({ records: many, envelopePath: "result", message: null }),
+    }
+  );
+  assert.equal(result.records.length, 300);
+
+  const all = compactResult(result) as { 열이름: string[]; 기록: unknown[][]; 글자수초과로덜어낸건수?: number };
+  assert.equal(all.기록.length, 300);
+  assert.equal(all.글자수초과로덜어낸건수, undefined);
+  for (let i = 0; i < all.열이름.length; i++) {
+    assert.ok(all.기록.some((row) => row[i] !== null && row[i] !== ""), `빈 열이 남아 있음: ${all.열이름[i]}`);
+  }
+
+  const cut = compactResult(result, 5000) as { 기록: unknown[][]; 글자수초과로덜어낸건수?: number };
+  assert.ok(cut.기록.length > 0 && cut.기록.length < 300);
+  assert.equal(cut.기록.length + (cut.글자수초과로덜어낸건수 ?? 0), 300);
+  assert.ok(JSON.stringify(cut).length <= 5000);
 });
