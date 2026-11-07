@@ -36,7 +36,8 @@ const MAX_TURNS_PER_SESSION = 20;
 const MAX_SESSIONS = 50;
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 const CHAT_RESULT_LIMIT_DEFAULT = 20;
-const CHAT_RESULT_LIMIT_MAX = 50;
+/** 사용자 요청(2026-11-07)으로 50 → 200 상향. 건수가 많을수록 질문당 입력 토큰(요금)이 늘어난다. */
+const CHAT_RESULT_LIMIT_MAX = 200;
 
 export class ChatError extends Error {
   constructor(
@@ -75,6 +76,7 @@ const SYSTEM_PROMPT = [
   '8. 법령은 아래 [법적 근거]에 적힌 범위에서만 인용하고, 그 밖의 법률 판단은 "이 부분은 명확한 확인이 어렵습니다"라고 답합니다.',
   "9. 정중하고 건조하며 명확한 공문서 어조로, 비전문가도 이해하기 쉽게 씁니다. 화면이 마크다운을 표시하지 않으므로 #, **, | 같은 기호와 표는 쓰지 말고 짧은 문단과 '-' 목록으로 씁니다.",
   "10. 처음 조회하는 지역·기간은 한 달에 1회씩 API를 호출해 시간이 걸립니다. 필요한 만큼만 조회합니다.",
+  `11. 결과 건수는 기본 ${CHAT_RESULT_LIMIT_DEFAULT}건입니다. 사용자가 더 많은 목록을 원하면 limit을 최대 ${CHAT_RESULT_LIMIT_MAX}건까지 지정합니다. 결과의 건수.truncated가 true이면 표시된 것보다 기록이 더 있다는 사실과 전체 건수를 함께 알립니다.`,
   "",
   `[단위 근거] ${RECEIVING_UNIT_NOTE}`,
   "",
@@ -121,7 +123,7 @@ const TOOLS: Anthropic.Beta.BetaTool[] = [
           type: "integer",
           minimum: 1,
           maximum: CHAT_RESULT_LIMIT_MAX,
-          description: `최대 건수 (기본 ${CHAT_RESULT_LIMIT_DEFAULT})`,
+          description: `최대 건수 (기본 ${CHAT_RESULT_LIMIT_DEFAULT}, 최대 ${CHAT_RESULT_LIMIT_MAX}). 사용자가 목록 전체나 많은 건수를 원할 때만 크게 지정한다.`,
         },
       },
       required: ["sigungu"],

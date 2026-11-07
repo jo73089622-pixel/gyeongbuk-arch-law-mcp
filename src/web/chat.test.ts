@@ -163,3 +163,15 @@ test("빈 질문·너무 긴 질문은 받지 않는다", async () => {
   await assert.rejects(handleChat({ message: "   " }, { createMessage: async () => message("end_turn", []) }), ChatError);
   await assert.rejects(handleChat({ message: "가".repeat(2001) }, { createMessage: async () => message("end_turn", []) }), ChatError);
 });
+
+test("AI 도우미는 최대 200건까지 받고, 201건은 입력 오류로 돌려준다", async () => {
+  for (const [limit, ok] of [[200, true], [201, false]] as const) {
+    const seen: Params[] = [];
+    const tu = { type: "tool_use", id: "tu_lim", name: "search_receiving_capacity", input: { sigungu: "구미시", months: 1, limit } };
+    const reply = await handleChat(
+      { message: "구미시 전체 목록" },
+      { search: fakeSearch, createMessage: scripted([message("tool_use", [tu]), message("end_turn", [{ type: "text", text: "끝" }])], seen) }
+    );
+    assert.equal(reply.toolCalls[0].ok, ok, String(limit));
+  }
+});
