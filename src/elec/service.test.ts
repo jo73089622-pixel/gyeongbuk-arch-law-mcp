@@ -246,3 +246,15 @@ test("행정구역 개편 지역은 새·옛 코드를 모두 조회해 같은 �
   assert.deepEqual(calls.map((c) => `${c.sido}-${c.gugun}`), ["12-21", "29-11"]);
   assert.deepEqual(r.records.map((x) => x.businessName).sort(), ["공통", "새코드", "옛코드"]);
 });
+
+test("검색 화면은 최대 20,000건까지 돌려주고, 그보다 큰 요청은 20,000건으로 줄인다", async () => {
+  const many = Array.from({ length: 20001 }, (_, i) => rec({ CMPNM: `시설${i}`, TRANSELE_CPCTY: "1500" }));
+  for (const [limit, expected] of [[20000, 20000], [20001, 20000]] as const) {
+    const result = await searchReceivingCapacity(
+      { sigungu: "구미시", months: 1, category: "전체", latestOnly: false, limit },
+      { apiKey: "K", cacheDir: tmpDir(), now: NOW, delayMs: 0, fetchMonth: fakeFetch({ "202611": many }) }
+    );
+    assert.equal(result.records.length, expected, String(limit));
+    assert.equal(result.counts.truncated, true);
+  }
+});

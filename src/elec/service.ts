@@ -22,8 +22,11 @@ export const MIN_MONTHS = 1;
 export const MAX_MONTHS = 60;
 export const FALLBACK_DEFAULT_MONTHS = 38;
 export const DEFAULT_LIMIT = 100;
-/** 사용자 요청(2026-11-07)으로 500 → 5,000 상향 */
-export const MAX_LIMIT = 5000;
+/**
+ * 검색 화면·CSV 내려받기의 최대 건수. 사용자 요청으로 500 → 5,000(2026-11-07) → 20,000(2026-11-10) 상향.
+ * AI 도우미(최대 5,000건)와 MCP 도구(최대 5,000건)는 각자의 입력 검사로 따로 제한한다.
+ */
+export const MAX_LIMIT = 20000;
 
 const SERVICE: KesService = "inspctResultInfo";
 

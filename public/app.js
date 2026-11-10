@@ -166,7 +166,8 @@
     if (result.region.note) warnings.push(`지역 유의사항: ${result.region.note}`);
     el.resultWarnings.replaceChildren(...warnings.map((w) => node("p", w, "warning")));
 
-    el.tbody.replaceChildren();
+    // 최대 20,000건을 한 번에 그리므로, 행을 문서 조각에 모은 뒤 한꺼번에 붙인다
+    const rows = document.createDocumentFragment();
     const empty = result.records.length === 0;
     el.noData.hidden = !empty;
     el.tableWrap.hidden = empty;
@@ -190,8 +191,9 @@
         node("td", r.result ?? "-"),
         node("td", r.safetyGrade ?? "-")
       );
-      el.tbody.append(tr);
+      rows.append(tr);
     }
+    el.tbody.replaceChildren(rows);
     fillList(el.resultNotes, result.notes);
     el.resultSection.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -259,7 +261,7 @@
     });
   });
 
-  // ---- 엑셀(CSV) 내려받기: 화면에 받은 결과(최대 5,000건)를 그대로 파일로 저장 ----
+  // ---- 엑셀(CSV) 내려받기: 화면에 받은 결과(최대 20,000건)를 그대로 파일로 저장 ----
   function csvCell(v) {
     let s = v === null || v === undefined ? "" : String(v);
     if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; // 엑셀 수식으로 실행되지 않게 막음
